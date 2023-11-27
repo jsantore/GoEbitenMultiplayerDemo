@@ -8,6 +8,11 @@ import (
 	"github.com/codecat/go-enet"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
+	"github.com/hajimehoshi/ebiten/v2/text"
+	"golang.org/x/image/colornames"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 	"log"
 	"path"
 )
@@ -21,6 +26,7 @@ type gameClient struct {
 	serverGameState  SharedData.MPgame
 	playerPict       *ebiten.Image
 	goldPict         *ebiten.Image
+	textFont         font.Face
 	desiredDirection int
 }
 
@@ -38,9 +44,9 @@ func (client *gameClient) Update() error {
 
 	case enet.EventReceive: // The server sent us data
 		packet := ev.GetPacket()
-		log.Println("got Raw Data from server:", packet.GetData())
+		//log.Println("got Raw Data from server:", packet.GetData())
 		json.Unmarshal(packet.GetData(), &client.serverGameState)
-		log.Println("got info from server, updated gamestate to:", client.serverGameState)
+		//log.Println("got info from server, updated gamestate to:", client.serverGameState)
 		packet.Destroy()
 	}
 	return nil
@@ -71,6 +77,12 @@ func (client *gameClient) Draw(screen *ebiten.Image) {
 		drawOps.GeoM.Reset()
 		drawOps.GeoM.Translate(float64(player.Xloc), float64(player.Yloc))
 		screen.DrawImage(client.playerPict, &drawOps)
+		//check playerID once we are running server non-local
+		//if player.PlayerID ==
+		if player.PlayerID == "127.0.0.1" {
+			scoreString := fmt.Sprintf("Score: %d", player.Score)
+			DrawCenteredText(screen, client.textFont, scoreString, 125, 50)
+		}
 	}
 }
 
@@ -103,6 +115,7 @@ func main() {
 		serverConn: client,
 		playerPict: LoadEmbeddedImage("", "goblin.png"),
 		goldPict:   LoadEmbeddedImage("", "coins.png"),
+		textFont:   LoadScoreFont(),
 	}
 	defer client.Destroy() // Destroy the host when we're done with it
 	// Uninitialize enet
@@ -123,4 +136,27 @@ func LoadEmbeddedImage(folderName string, imageName string) *ebiten.Image {
 		fmt.Println("Error loading tile image:", imageName, err)
 	}
 	return ebitenImage
+}
+
+func LoadScoreFont() font.Face {
+	//originally inspired by https://www.fatoldyeti.com/posts/roguelike16/
+	trueTypeFont, err := opentype.Parse(fonts.PressStart2P_ttf)
+	if err != nil {
+		fmt.Println("Error loading font for score:", err)
+	}
+	fontFace, err := opentype.NewFace(trueTypeFont, &opentype.FaceOptions{
+		Size:    20,
+		DPI:     72,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		fmt.Println("Error loading font of correct size for score:", err)
+	}
+	return fontFace
+}
+
+func DrawCenteredText(screen *ebiten.Image, font font.Face, s string, cx, cy int) { //from https://github.com/sedyh/ebitengine-cheatsheet
+	bounds := text.BoundString(font, s)
+	x, y := cx-bounds.Min.X-bounds.Dx()/2, cy-bounds.Min.Y-bounds.Dy()/2
+	text.Draw(screen, s, font, x, y, colornames.White)
 }

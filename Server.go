@@ -3,6 +3,7 @@ package main
 import (
 	"MultiplaterDemo/SharedData"
 	"encoding/json"
+	"github.com/co0p/tankism/lib/collision"
 	"github.com/codecat/go-enet"
 	"log"
 	"math/rand"
@@ -73,7 +74,7 @@ func RunServer(host enet.Host, game SharedData.MPgame) {
 
 			processPlayerMove(&game, ev)
 			result, err := json.Marshal(&game)
-			log.Println("About to send this json to client", result)
+			//log.Println("About to send this json to client", result)
 			if err != nil {
 				log.Fatal("Big error turning game into json: ", err)
 			}
@@ -94,7 +95,7 @@ func processPlayerMove(game *SharedData.MPgame, ev enet.Event) {
 	directionAsString := string(packet.GetData())
 	direction, err := strconv.Atoi(directionAsString)
 	if err != nil {
-		log.Fatal("Client side trickery! nont senting direction", err)
+		log.Fatal("Client side trickery! not sending direction", err)
 	}
 	playerID := ev.GetPeer().GetAddress().String()
 	//find the right player
@@ -109,7 +110,28 @@ func processPlayerMove(game *SharedData.MPgame, ev enet.Event) {
 			} else if direction == SharedData.RIGHT {
 				game.Players[loc].Xloc += SharedData.TRAVEL_SPEED
 			}
-			//log.Println(game.Players[loc])
+			//now check to see if the player overlaps any of the gold
+			playerBounds := collision.BoundingBox{
+				X:      float64(game.Players[loc].Xloc),
+				Y:      float64(game.Players[loc].Yloc),
+				Width:  SharedData.PLAYER_WIDTH,
+				Height: SharedData.PLAYER_HEIGHT,
+			}
+			//only one can be collected per update
+			for treasureNum, treasure := range game.Gold {
+				goldBounds := collision.BoundingBox{
+					X:      float64(treasure.Xloc),
+					Y:      float64(treasure.Yloc),
+					Width:  SharedData.GOLD_WIDTH,
+					Height: SharedData.GOLD_HEIGHT,
+				}
+				if collision.AABBCollision(playerBounds, goldBounds) {
+					game.Players[loc].Score += 1
+					game.Gold = append(game.Gold[:treasureNum], game.Gold[treasureNum+1:]...)
+					break
+				}
+			}
+			//	log.Println("processing move for playerID:", game.Players[loc].PlayerID)
 		}
 	}
 
